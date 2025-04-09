@@ -9,6 +9,8 @@ jobs:
   build-release:
     name: Build and Release
     runs-on: ubuntu-latest # Use Ubuntu runner (common and often faster)
+    permissions:
+      contents: write
     steps:
       - name: Check out code
         uses: actions/checkout@v4 # Action to get your code
