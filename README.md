@@ -2,9 +2,30 @@
 
 A tiny, zero-dependency Windows application that passes its command line arguments on to a executable, either prepending or appending additional arguments specified in a configuration file.
 
-## Overview
+In simple terms: Want to always add specific arguments whenever a certain program is run, even if you can't change how it's started? ProxyLauncher can do this by replacing the original program and acting as an intermediary.
 
+## Table of Contents
+- [Overview](#overview)
+- [Configuration](#configuration)
+  - [Configuration Keys](#configuration-keys)
+  - [Simple Usage](#simple-usage)
+  - [Common Usage: Automatically Adding Arguments](#common-usage-automatically-adding-arguments)
+- [Bonus](#bonus)
+- [Building from Source](#building-from-source)
+- [Example](#example)
+
+## Overview<br>
 ProxyLauncher serves as a wrapper for other executables, allowing you to add predefined arguments to the target application without modifying the original command line. This is particularly useful when you want to add command line arguments but have no control over its invocation, or you want to create a drop-in replacement for an existing executable which needs additional arguments to function.
+
+Here's a simple illustration of how it works:
+
+```mermaid
+flowchart LR
+    A["Call from somewhere:<br>_target.exe A B C=D /E=OFF -nogood_"] --> B{Now invokes _ProxyLauncher_};
+    B --> C{"Reads <i>config.cfg</i>:<br>(_target_, _extraArgs_, _extraArgsOrder_)"};
+    C --> D{"Combines arguments:<br>e.g., (_extraArgs_ + _incoming args_)"};
+    D --> E[Executes Target:<br>&quot;_original\_target.exe --specialMode /switch=ON A B C=D /E=OFF -nogood_&quot;];
+```
 
 ## Configuration
 
@@ -36,17 +57,22 @@ proxylauncher.exe arg1 arg2 arg3
 
 Based on your configuration, ProxyLauncher will execute the target application with the combined arguments.
 
-### Common Usage
-Replace an existing executable with ProxyLauncher:
+### Common Usage: Automatically Adding Arguments
 
-1. Rename the original executable (e.g. `target_app.exe`)to something else (e.g., `original.exe`), or move it to another directory (incl. all its dependencies, like DLLs)
-2. Copy `proxylauncher.exe` to the same directory and rename it to the original executable's name (e.g., `target_app.exe`)
-3. Create a configuration file with the same name as the executable but with a `.cfg` extension (e.g., `target_app.cfg`)
-4. Edit the configuration file to set the `target` to the original executable's path
-5. Edit the configuration file to set the `extraArgs` to the arguments you want to pass to the target application
-6. Edit the configuration file to set the `extraArgsOrder` to `before` or `after` based on your preference
+Most commonly, ProxyLauncher is used to add arguments to an existing executable, even if you can't change how it's started.
 
-When the `target_app.exe` executable is now invoked, it is the ProxyLauncher that is executed, which will pass the arguments on to the original target application and prepend or append the configured additional arguments.
+Here's how to set it up:
+
+1.  **Move or Rename the Original:** Locate the program you want to wrap (e.g., `target_app.exe`). You can either:
+    *   **Rename it** in the same folder (e.g., to `target_app_original.exe`).
+    *   **Move it** to a different folder (remembering its new location).
+2.  **Replace with ProxyLauncher:** Copy `proxylauncher.exe` into the *original* program's folder and rename *it* to the original program's name (`target_app.exe`).
+3.  **Create Configuration:** In the same folder as the new `target_app.exe` (which is ProxyLauncher), make a new text file named `target_app.cfg`. Inside this file, specify:
+    *   `target=path\to\original\target_app_original.exe` (Use the new name or the full path if you moved it).
+    *   `extraArgs=--your-extra --arguments "here"`
+    *   `extraArgsOrder=before` (or `after`, depending on where you want the extra arguments)
+
+**The Result:** Now, whenever `target_app.exe` is executed from its original location, it's actually ProxyLauncher running first. It reads the `.cfg` file, finds the *real* program (wherever you moved/renamed it), and then launches it with the combined arguments (your extra ones plus any arguments it was originally called with). The original program runs as intended, but with your predefined arguments automatically included!
 
 ## Bonus
 When launching without an existing configuration file, ProxyLauncher will create a default configuration file and open it in Notepad. You'll just need to fill in the values.
@@ -78,4 +104,3 @@ proxylauncher.exe A B C=D /E=OFF -nogood
 The proxy launcher will execute:
 ```
 "C:\path\to\child directory\another_program.exe" --specialMode /switch=ON A B C=D /E=OFF -nogood
-```
