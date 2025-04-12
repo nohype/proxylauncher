@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -17,6 +18,7 @@ type Config struct {
 	Target         string
 	ExtraArgs      string
 	ExtraArgsOrder string
+	HideTarget     bool
 }
 
 func main() {
@@ -93,6 +95,11 @@ func main() {
 	// Create command
 	cmd := exec.Command(targetPath, allArgs...)
 
+	// Hide window if configured
+	if config.HideTarget {
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	}
+
 	// Use the current working directory from which proxylauncher was launched
 	// Working directory is inherited from the current process
 
@@ -130,16 +137,20 @@ func createDefaultConfig(configPath string) error {
 		"extraArgs=",
 		"",
 		"# Whether extra arguments come before or after the received command line arguments (valid values: before, after)",
-		"extraArgsOrder=",
+		"extraArgsOrder=before",
+		"",
+		"# Whether to hide the target application's windows (valid values: true/yes/on, false/no/off)",
+		"hideTarget=false",
 	}
 
-	for _, line := range lines {
-		if _, err := file.WriteString(line + "\n"); err != nil {
-			return err
-		}
-	}
+	// for _, line := range lines {
+	// 	if _, err := file.WriteString(line + "\n"); err != nil {
+	// 		return err
+	// 	}
+	// }
 
-	return nil
+	_, err = file.WriteString(strings.Join(lines, "\n"))
+	return err
 }
 
 // readConfig reads and parses the configuration file
@@ -152,8 +163,13 @@ func readConfig(configPath string) (Config, error) {
 	}
 	defer file.Close()
 
+	// Track key occurrences for duplicate detection
+	keyCount := make(map[string]int)
+	lineNumber := 0
+
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
+		lineNumber++
 		line := scanner.Text()
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue // Skip empty lines and comments
@@ -167,6 +183,12 @@ func readConfig(configPath string) (Config, error) {
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
 
+		// Increment key count for duplicate detection
+		keyCount[key]++
+		if keyCount[key] > 1 {
+			return config, fmt.Errorf("duplicate key %q found at line %d in configuration file", key, lineNumber)
+		}
+
 		switch strings.ToLower(key) {
 		case "target":
 			config.Target = value
@@ -174,6 +196,8 @@ func readConfig(configPath string) (Config, error) {
 			config.ExtraArgs = value
 		case "extraargsorder":
 			config.ExtraArgsOrder = value
+		case "hidetarget":
+			config.HideTarget = slices.Contains([]string{"true", "yes", "on"}, strings.ToLower(value))
 		}
 	}
 
@@ -185,10 +209,10 @@ func readConfig(configPath string) (Config, error) {
 	if config.Target == "" {
 		return config, fmt.Errorf("missing 'target' in configuration")
 	}
-	if (config.ExtraArgs == "") && (config.ExtraArgsOrder == "") {
-		return config, fmt.Errorf("missing 'extraArgsOrder' in configuration")
+	if config.ExtraArgs != "" && config.ExtraArgsOrder == "" {
+		return config, fmt.Errorf("missing 'extraArgsOrder' in configuration when 'extraArgs' is specified")
 	}
-	if strings.ToLower(config.ExtraArgsOrder) != "before" && strings.ToLower(config.ExtraArgsOrder) != "after" {
+	if config.ExtraArgsOrder != "" && !slices.Contains([]string{"before", "after"}, strings.ToLower(config.ExtraArgsOrder)) {
 		return config, fmt.Errorf("invalid 'extraArgsOrder' value (must be 'before' or 'after')")
 	}
 
