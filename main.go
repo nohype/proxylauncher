@@ -6,11 +6,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"syscall"
 
-	"golang.org/x/sys/windows"
+	"github.com/ncruces/zenity"
 )
 
 // Config holds the configuration read from the .cfg file
@@ -23,7 +24,8 @@ type Config struct {
 
 func main() {
 	// 1. Determine own executable path
-	exePath, err := getExecutablePath()
+	// exePath, err := getExecutablePath()
+	exePath, err := os.Executable()
 	if err != nil {
 		showErrorMessageBox("Failed to determine executable path: " + err.Error())
 		return
@@ -71,13 +73,13 @@ func main() {
 		targetPath = filepath.Join(exeDir, config.Target)
 	}
 
-	// 3. Check if target executable exists
-	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+	// Check if target executable exists
+	if !fileExists(targetPath) {
 		showErrorMessageBox("Target executable not found: " + targetPath)
 		return
 	}
 
-	// 4. Launch target executable with arguments
+	// 3. Launch target executable with arguments
 	// Parse extra args
 	extraArgs := parseArgs(config.ExtraArgs)
 
@@ -95,9 +97,19 @@ func main() {
 	// Create command
 	cmd := exec.Command(targetPath, allArgs...)
 
-	// Hide window if configured
+	// Redirect I/O
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Hide window if configured, platform-specific
 	if config.HideTarget {
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		if runtime.GOOS == "windows" {
+			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		} else {
+			// Note: Hiding target application windows is currently only supported on Windows.
+			// On Linux/macOS, this option has no effect due to platform differences.
+		}
 	}
 
 	// Use the current working directory from which proxylauncher was launched
@@ -110,14 +122,13 @@ func main() {
 	}
 }
 
-// getExecutablePath returns the full path of the current executable
-func getExecutablePath() (string, error) {
-	buffer := make([]uint16, windows.MAX_PATH)
-	n, err := windows.GetModuleFileName(0, &buffer[0], windows.MAX_PATH)
+// fileExists checks if a file exists, considering case sensitivity on Linux/macOS
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
 	if err != nil {
-		return "", err
+		return false
 	}
-	return syscall.UTF16ToString(buffer[:n]), nil
+	return !info.IsDir()
 }
 
 // createDefaultConfig creates a default configuration file with comments
@@ -143,13 +154,7 @@ func createDefaultConfig(configPath string) error {
 		"hideTarget=false",
 	}
 
-	// for _, line := range lines {
-	// 	if _, err := file.WriteString(line + "\n"); err != nil {
-	// 		return err
-	// 	}
-	// }
-
-	_, err = file.WriteString(strings.Join(lines, "\n"))
+	_, err = file.WriteString(strings.Join(lines, "\n") + "\n")
 	return err
 }
 
@@ -256,14 +261,10 @@ func parseArgs(argsStr string) []string {
 
 // showErrorMessageBox displays an error message box
 func showErrorMessageBox(message string) {
-	title := "ProxyLauncher Error"
-	flags := windows.MB_OK | windows.MB_ICONERROR
-	windows.MessageBox(0, windows.StringToUTF16Ptr(message), windows.StringToUTF16Ptr(title), uint32(flags))
+	_ = zenity.Error(message, zenity.Title("ProxyLauncher Error"))
 }
 
 // showInfoMessageBox displays an information message box
 func showInfoMessageBox(message string) {
-	title := "ProxyLauncher Information"
-	flags := windows.MB_OK | windows.MB_ICONINFORMATION
-	windows.MessageBox(0, windows.StringToUTF16Ptr(message), windows.StringToUTF16Ptr(title), uint32(flags))
+	_ = zenity.Info(message, zenity.Title("ProxyLauncher Information"))
 }

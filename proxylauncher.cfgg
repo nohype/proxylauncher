@@ -1,0 +1,4 @@
+target =  C:\Windows\System32\notepad.exe
+# extraArgs = /P
+extraArgsOrder      = before
+hideTarget=off
